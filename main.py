@@ -30,9 +30,6 @@ models = [
     "deepseek-r1:1.5b",
 ]
 
-with open("companies-smol.txt", "r") as file:
-    companies = file.readlines()
-
 for company in companies:
     company_url = company.strip()
 
@@ -122,10 +119,13 @@ for company in companies:
             "From job:",
             response_content2.get("company_name"),
             response_content2.get("company_url"),
+            response_content2.get("salary_min"),
+            response_content2.get("salary_max"),
+            response_content2.get("currency"),
         )
 
         # save the company url, company name and job description in a file
-with open("companies-smol.txt", "a") as file:
-    file.write(
-        f"{company_url},{response_content1.get('company_name')},{response_content1.get('company_url')},{response_content2.get('company_name')},{response_content2.get('company_url')},{response_content2.get('salary_min')},{response_content2.get('salary_max')},{response_content2.get('currency')},{model}\n"
-    )
+        with open("companies-smol.txt", "a") as file:
+            file.write(
+                f"{company_url},{response_content1.get('company_name')},{response_content1.get('company_url')},{response_content2.get('company_name')},{response_content2.get('company_url')},{response_content2.get('salary_min')},{response_content2.get('salary_max')},{response_content2.get('currency')},{model}\n"
+            )
