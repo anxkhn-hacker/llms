@@ -1,11 +1,6 @@
 import json
 import re
-
 import requests
-from ollama import chat
-import time
-
-# open companies.txt and load them into a list
 
 companies = [
     "https://7eleven.wd3.myworkdayjobs.com/7eleven",
@@ -48,8 +43,6 @@ big_models = ["phi4", "llama3.2", "deepseek-r1:8b"]
 
 
 for model in big_models:
-    model = model + "-model"
-
     for company in companies:
         company_url = company.strip()
         # send curl request to the company's careers page
@@ -71,34 +64,45 @@ for model in big_models:
         job_responce = requests.get(internal_url + job_link)
         print(internal_url + job_link)
 
-        # start timer here to measure the time taken to get the response
-        start_time = time.time()
 
-        response = chat(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": """Extract and provide the main company name from the job description. Analyze the job description step-by-step to determine the most logical minimum and maximum annual salary for the role based on the company, location, job title, experience required, and industry standards. Follow these steps for salary calculation:
-
-                    Carefully analyze the salary information provided in the job description.
-                    Consider the type of employment specified: full-time, part-time, contract, internship, etc.
-                    If the salary is given as a weekly rate:
-                    Multiply it by 40 hours per week and 52 weeks per year for a full-time role.
-                    Multiply it by 20 hours per week and 52 weeks per year for a part-time role.
-                    If the salary is given as a monthly rate, multiply it by 12 months to convert it into an annual salary.
-                    If the salary is already provided on an annual basis, no further calculations are needed.
-                    Consider any additional details from the job description (e.g., internship or contract duration) to ensure the calculated salary is reflective of the role.
-                    Finally, provide the calculated salary in per annum and include the city, state, and country as mentioned in the job description. Ensure all calculations are accurate and based on the details provided in the job description."""
-                    + job_responce.text,
-                }
-            ],
-            format={
+        data = {
+            "model": model,
+            "prompt": """
+            You are tasked to analyze a job description and extract specific information.
+            Provide the main company name from the job description in the field `company_name`.
+            Analyze the job description step-by-step to determine the minimum annual salary and maximum annual salary for the role. The calculation should be based on the following factors:  
+            - Company information  
+            - Location  
+            - Job title  
+            - Experience required  
+            - Industry standards
+            Follow these steps for accurate salary determination:  
+            1. Analyze salary information provided in the job description:  
+            - If the salary is specified directly in the description, extract and convert it into an annual format if necessary.  
+            - If no salary is provided, use industry standards based on the other factors mentioned.  
+            2. Account for the type of employment specified (e.g., full-time, part-time, contract, internship):  
+            - For weekly rates:  
+                - Multiply by 40 hours per week and 52 weeks per year for full-time roles.  
+                - Multiply by 20 hours per week and 52 weeks per year for part-time roles.  
+            - For monthly rates:  
+                - Multiply by 12 months to convert into an annual salary.
+            3. Provide the salary range:  
+            - Ensure `minimum_annual_salary` and `maximum_annual_salary` are clearly stated.  
+            - Use the international 3-letter currency code (e.g., USD, EUR, GBP, INR) for the salary values in the field `currency`.
+            Additionally, provide the following information about the job location:  
+            - City: Include the name of the city in the field `city`.  
+            - State/Region: Specify the state or region in the field `state`.  
+            - Country: Mention the country in the field `country`.
+            
+            Here is the job description:
+            """
+            + job_responce.text,
+            "format": {
                 "type": "object",
                 "properties": {
                     "company_name": {"type": "string"},
-                    "salary_min": {"type": "number"},
-                    "salary_max": {"type": "number"},
+                    "minimum_annual_salary": {"type": "number"},
+                    "maximum_annual_salary": {"type": "number"},
                     "currency": {"type": "string"},
                     "city": {"type": "string"},
                     "state": {"type": "string"},
@@ -106,31 +110,37 @@ for model in big_models:
                 },
                 "required": [
                     "company_name",
-                    "salary_min",
-                    "salary_max",
+                    "minimum_annual_salary",
+                    "maximum_annual_salary",
                     "currency",
                     "city",
                     "state",
                     "country",
                 ],
             },
-        )
+            "options": {
+                "num_ctx": 4096,
+            },
+            "stream": False,
+            "keep_alive": "10m",
+        }
 
-        # end timer here
-        end_time = time.time()
-        time_taken = end_time - start_time
-        time_taken_in_seconds = round(time_taken, 2)
-        print(f"Time taken: {time_taken_in_seconds}, model used: {model}")
-        response_content2 = json.loads(response["message"]["content"])
+        url = "http://localhost:11434/api/generate"
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        response_content = json.loads(response.text)
+        time_taken = round(response_content.get("total_duration") / 1000000000, 2)
+        print("Time taken:", time_taken)
+        job_data = json.loads(response_content["response"])
         print(
             "From job:",
-            response_content2.get("company_name"),
-            response_content2.get("salary_min"),
-            response_content2.get("salary_max"),
-            response_content2.get("currency"),
-            response_content2.get("city"),
-            response_content2.get("state"),
-            response_content2.get("country"),
+            job_data.get("company_name"),
+            job_data.get("minimum_annual_salary"),
+            job_data.get("maximum_annual_salary"),
+            job_data.get("currency"),
+            job_data.get("city"),
+            job_data.get("state"),
+            job_data.get("country"),
         )
 
         # save all the details in a csv
@@ -139,12 +149,12 @@ for model in big_models:
                 f"{model},"
                 f"{company_url},"
                 f"{internal_url + job_link},"
-                f"{time_taken_in_seconds},"
-                f"{response_content2.get('company_name')},"
-                f"{response_content2.get('salary_min')},"
-                f"{response_content2.get('salary_max')},"
-                f"{response_content2.get('currency')},"
-                f"{response_content2.get('city')},"
-                f"{response_content2.get('state')},"
-                f"{response_content2.get('country')}\n"
+                f"{time_taken},"
+                f"{job_data.get('company_name')},"
+                f"{job_data.get('minimum_annual_salary')},"
+                f"{job_data.get('maximum_annual_salary')},"
+                f"{job_data.get('currency')},"
+                f"{job_data.get('city')},"
+                f"{job_data.get('state')},"
+                f"{job_data.get('country')},"
             )
